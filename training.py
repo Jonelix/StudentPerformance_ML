@@ -25,11 +25,11 @@ train_df, test_df = train_test_split(df, test_size=0.15, random_state=42)
 print("Data split into training and testing sets")
 
 # Define features and target variable
-X_train = train_df.drop(columns=['failures'])
+X_train = train_df.drop(columns=['failures']).values
 y_train_reg = train_df['failures']
 y_train_cls = (train_df['failures'] > 0).astype(int)
 
-X_test = test_df.drop(columns=['failures'])
+X_test = test_df.drop(columns=['failures']).values
 y_test_reg = test_df['failures']
 y_test_cls = (test_df['failures'] > 0).astype(int)
 
@@ -39,19 +39,19 @@ print("Classifier identified")
 
 # Train regression models
 print("Training RegN")
-model1 = train_linear_model(X_train, y_train_reg, reg_type=None)  # Standard
+model1 = train_linear_model(X_train, y_train_reg.values, reg_type=None)  # Standard
 print("Training Reg1")
-model2 = train_linear_model(X_train, y_train_reg, reg_type="l1", alpha=regularizer_weight)  # Lasso
+model2 = train_linear_model(X_train, y_train_reg.values, reg_type="l1", alpha=regularizer_weight)  # Lasso
 print("Training Reg2")
-model3 = train_linear_model(X_train, y_train_reg, reg_type="l2", alpha=regularizer_weight)  # Ridge
+model3 = train_linear_model(X_train, y_train_reg.values, reg_type="l2", alpha=regularizer_weight)  # Ridge
 
 # Train logistic models
 print("Training LogN")
-model4 = train_logistic_model(X_train, y_train_cls, reg_type=None)  # Standard
+model4 = train_logistic_model(X_train, y_train_cls.values, reg_type=None)  # Standard
 print("Training Log1")
-model5 = train_logistic_model(X_train, y_train_cls, reg_type="l1", alpha=regularizer_weight)  # Lasso
+model5 = train_logistic_model(X_train, y_train_cls.values, reg_type="l1", alpha=regularizer_weight)  # Lasso
 print("Training Log2")
-model6 = train_logistic_model(X_train, y_train_cls, reg_type="l2", alpha=regularizer_weight)  # Ridge
+model6 = train_logistic_model(X_train, y_train_cls.values, reg_type="l2", alpha=regularizer_weight)  # Ridge
 
 # Testing Section
 print("Evaluating models")

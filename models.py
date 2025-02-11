@@ -1,4 +1,6 @@
 import torch
+import json
+import joblib
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.linear_model import SGDRegressor, SGDClassifier
@@ -11,6 +13,32 @@ print(f"Using device: {device}")
 
 MODEL_SAVE_PATH = "trained_models/"
 os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
+
+def save_model_json(model, scaler, model_path):
+    """Save model parameters and scaler as a JSON file."""
+    model_data = {
+        "coef_": model.coef_.tolist(),
+        "intercept_": model.intercept_.tolist(),
+        "scaler_mean_": scaler.mean_.tolist(),
+        "scaler_var_": scaler.var_.tolist()
+    }
+    with open(os.path.join(model_path, "model.json"), "w") as f:
+        json.dump(model_data, f)
+
+def load_model_json(model_path):
+    """Load model parameters and scaler from a JSON file."""
+    with open(os.path.join(model_path, "model.json"), "r") as f:
+        model_data = json.load(f)
+    
+    model = SGDRegressor()
+    model.coef_ = model_data["coef_"]
+    model.intercept_ = model_data["intercept_"]
+    
+    scaler = StandardScaler()
+    scaler.mean_ = model_data["scaler_mean_"]
+    scaler.var_ = model_data["scaler_var_"]
+    
+    return model, scaler
 
 class LinearRegressionModel(nn.Module):
     """
@@ -26,26 +54,27 @@ class LinearRegressionModel(nn.Module):
 def train_linear_model(X_train, y_train, reg_type=None, alpha=0.01):
     """
     Train a linear regression model using SGD with optional regularization.
-    Automatically uses GPU if available.
+    Automatically saves the trained model as JSON.
     """
     if reg_type is None:
         model = SGDRegressor(loss="squared_error", penalty=None, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LiRe_NoReg"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     elif reg_type == "l1":
         model = SGDRegressor(loss="squared_error", penalty="l1", alpha=alpha, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LiRe_L1"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     elif reg_type == "l2":
         model = SGDRegressor(loss="squared_error", penalty="l2", alpha=alpha, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LiRe_L2"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     else:
         raise ValueError("Invalid regularization type. Choose 'l1' or 'l2'.")
-
+    
+    os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
+    
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)  # Scale the input data
     model.fit(X_train, y_train)
+    
+    save_model_json(model, scaler, MODEL_SAVE_PATH)
     return model
 
 class LogisticRegressionModel(nn.Module):
@@ -62,26 +91,27 @@ class LogisticRegressionModel(nn.Module):
 def train_logistic_model(X_train, y_train, reg_type=None, alpha=0.01):
     """
     Train a logistic regression model using SGD with optional regularization.
-    Automatically uses GPU if available.
+    Automatically saves the trained model as JSON.
     """
     if reg_type is None:
         model = SGDClassifier(loss="log_loss", penalty=None, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LoRe_NoReg"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     elif reg_type == "l1":
         model = SGDClassifier(loss="log_loss", penalty="l1", alpha=alpha, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LoRe_L1"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     elif reg_type == "l2":
         model = SGDClassifier(loss="log_loss", penalty="l2", alpha=alpha, learning_rate="optimal")
         MODEL_SAVE_PATH = "trained_models/LoRe_L2"
-        os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
     else:
         raise ValueError("Invalid regularization type. Choose 'l1' or 'l2'.")
-
+    
+    os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
+    
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     model.fit(X_train, y_train)
+    
+    save_model_json(model, scaler, MODEL_SAVE_PATH)
     return model
 
 def train_pytorch_linear_model(X_train, y_train, epochs=100, lr=0.01):
