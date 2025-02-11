@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.linear_model import SGDRegressor, SGDClassifier
 from sklearn.preprocessing import StandardScaler
+import os
 
 # Automatically select device (GPU if available, otherwise CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
