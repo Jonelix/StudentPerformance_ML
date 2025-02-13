@@ -112,6 +112,8 @@ def remove_outliers_all_columns(df, method='iqr', threshold=1.5):
 # Example usage:
 # df = remove_outliers_all_columns(df, method='iqr')
 
+#def balance_dataset_by_target(df, target_column):
+
 
 def transform_student_data(input_file: str, delimiter, output_file: str):
     '''

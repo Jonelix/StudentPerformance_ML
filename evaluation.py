@@ -42,3 +42,36 @@ def plot_confusion_matrix(y_true, y_pred, model_name):
     plt.ylabel("True Label")
     plt.title(model_name)
     plt.show()
+
+def plot_model_acc_and_fscore(model_accs, models_fscores, model_names):
+    x = np.arange(len(model_names))  # X locations for the groups
+    width = 0.4  # Width of the bars
+    
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    
+    # Create first axis for accuracy
+    ax1.set_xlabel('Models')
+    ax1.set_ylabel('Accuracy', color='tab:blue')
+    bars1 = ax1.bar(x - width/2, model_accs, width, label='Accuracy', color='tab:blue', alpha=0.7)
+    ax1.set_ylim(0, 1.1)  # Assuming accuracy is between 0 and 1
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    
+    # Create second y-axis for F-score
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('F-score', color='tab:red')
+    bars2 = ax2.bar(x + width/2, models_fscores, width, label='F-score', color='tab:red', alpha=0.7)
+    ax2.set_ylim(0, 1.1)  # Assuming F-score is between 0 and 1
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+    
+    # Add labels and title
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(model_names, rotation=30, ha='right')
+    fig.suptitle('Model Accuracy and F-score Comparison')
+    
+    # Create a single legend
+    fig.legend([bars1, bars2], ['Accuracy', 'F-score'], loc='upper left', bbox_to_anchor=(0.12, 0.975))
+    
+    plt.show()
+
+plot_model_acc_and_fscore([0.8, 0.85, 0.9], [0.75, 0.8, 0.88], ['Model A', 'Model B', 'Model C'])
+    
