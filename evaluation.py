@@ -73,5 +73,105 @@ def plot_model_acc_and_fscore(model_accs, models_fscores, model_names):
     
     plt.show()
 
-plot_model_acc_and_fscore([0.8, 0.85, 0.9], [0.75, 0.8, 0.88], ['Model A', 'Model B', 'Model C'])
+def display_model_weights(model, df, num_features=5):
     
+    feature_names = df.columns  # Assuming last column is target
+    weights = model.coef_.ravel()
+    
+    weight_df = pd.DataFrame({
+        "Feature": feature_names,
+        "Absolute value weight": np.abs(weights),
+        "Weight": weights
+    })
+    
+    weight_df = weight_df.sort_values(by="Absolute value weight", ascending=False)
+    
+    
+    print(weight_df[:num_features])
+    print("Displayed sorted feature weights")
+
+from sklearn.metrics import accuracy_score
+def evaluate_model(model, X_test, y_test, model_threshold=0, model_name="Model"):
+    y_pred = model.predict(X_test) > model_threshold
+    #Add line here
+    acc = accuracy_score(y_test, y_pred)
+    f1 = fscore(y_test, y_pred)
+    plot_confusion_matrix(y_test, y_pred, model_name)
+    print(f"{model_name} accuracy: {acc}")
+    print(f"{model_name} f1 score: {f1}")
+    return acc, f1
+
+def evaluate_model_debug(model, X_test, y_test, model_threshold=0.5, model_name="Model"):
+    # Get prediction probabilities (assumes binary classification)
+    y_scores = model.predict_proba(X_test)[:, 1]  # Probabilities for class 1
+
+    # Threshold the scores
+    y_pred = y_scores > model_threshold
+
+    # Debug: see first few prediction scores
+    print(f"Sample predicted scores (positive class): {y_scores[:10]}")
+    print(f"Applied threshold: {model_threshold}")
+    print(f"Predicted labels: {y_pred[:10]}")
+
+    # Evaluate
+    acc = accuracy_score(y_test, y_pred)
+    f1 = fscore(y_test, y_pred)
+    plot_confusion_matrix(y_test, y_pred, model_name)
+    print(f"{model_name} accuracy: {acc}")
+    print(f"{model_name} f1 score: {f1}")
+
+    return acc, f1
+
+def evaluate_model_thresholded_regression(model, X_test, y_test, model_threshold=0.5, model_name="Thresholded Regressor", debug=False):
+    y_scores = model.predict(X_test)
+    y_pred = y_scores < model_threshold
+    if debug:
+        print(f"[{model_name}] Sample predicted scores: {y_scores[:10]}")
+        print(f"[{model_name}] Applied threshold: {model_threshold}")
+        print(f"[{model_name}] Predicted labels: {y_pred[:10]}")
+        print(f"[{model_name}] Sample true values: {y_test[:10].values}")
+
+    acc = accuracy_score(y_test, y_pred)
+    f1 = fscore(y_test, y_pred)
+    print(f"[{model_name}] Accuracy: {acc}")
+    print(f"[{model_name}] F1 Score: {f1}")
+    plot_confusion_matrix(y_test, y_pred, model_name)
+
+    return acc, f1
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import numpy as np
+
+def evaluate_model_regression(model, X_test, y_test, model_name="Regressor"):
+    y_pred = model.predict(X_test)
+
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+
+    print(f"[{model_name}] RMSE: {rmse:.4f}")
+    print(f"[{model_name}] MAE: {mae:.4f}")
+    print(f"[{model_name}] R² Score: {r2:.4f}")
+
+    return rmse, mae, r2
+
+def evaluate_model_classifier(model, X_test, y_test, model_threshold=0.5, model_name="Classifier", debug=False):
+    y_scores = model.predict_proba(X_test)[:, 1]
+    y_pred = y_scores > model_threshold
+    if debug:
+        print(f"[{model_name}] Sample predicted probabilities: {y_scores[:10]}")
+        print(f"[{model_name}] Applied threshold: {model_threshold}")
+        print(f"[{model_name}] Predicted labels: {y_pred[:10]}")
+        print(f"[{model_name}] Sample true values: {y_test[:10].values}")
+
+    acc = accuracy_score(y_test, y_pred)
+    f1 = fscore(y_test, y_pred)
+    
+    print(f"[{model_name}] Accuracy: {acc}")
+    print(f"[{model_name}] F1 Score: {f1}")
+    plot_confusion_matrix(y_test, y_pred, model_name)
+
+    return acc, f1
+
+

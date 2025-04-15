@@ -163,6 +163,66 @@ def transform_student_data(input_file: str, delimiter, output_file: str):
     
     print(f"Processed data saved to {output_file}")
 
+#Displays the amount of rows and columns in the training and testing data
+def frame_status_info(training_data, testing_data):
+    print(f"Training data shape: {training_data.shape}")
+    print(f"Testing data shape: {testing_data.shape}")
+    return
+
+def category_split(df: pd.DataFrame, condition: str):
+    """
+    Splits a DataFrame into two based on a given condition.
+    
+    Parameters:
+        df (pd.DataFrame): The input dataframe.
+        condition (str): A condition string that can be evaluated with `query`.
+        
+    Returns:
+        tuple: Two dataframes, one meeting the condition and one not meeting it.
+    """
+    try:
+        df_matching = df.query(condition)
+        df_not_matching = df[~df.index.isin(df_matching.index)]
+        return df_matching, df_not_matching
+    except Exception as e:
+        print(f"Error evaluating condition: {e}")
+        return None, None
+
+from sklearn.model_selection import train_test_split
+
+def balance_feature(df_matching: pd.DataFrame, df_not_matching: pd.DataFrame, split_ratio: float) -> pd.DataFrame:
+    """
+    Creates a balanced training dataframe from matching and non-matching dataframes.
+    
+    Parameters:
+        df_matching (pd.DataFrame): DataFrame where the feature matches the condition.
+        df_not_matching (pd.DataFrame): DataFrame where the feature does not match the condition.
+        split_ratio (float): Proportion of data to use from df_matching.
+        
+    Returns:
+        pd.DataFrame: A single balanced training dataframe.
+    """
+    try:
+        # Sample the desired portion of df_matching for training
+        train_matching = df_matching.sample(frac=split_ratio, random_state=42)
+
+        # Match the number of non-matching samples to the number of matching samples
+        train_non_matching = df_not_matching.sample(n=len(train_matching), random_state=42, replace=False)
+
+        # Combine and shuffle
+        train_balanced = pd.concat([train_matching, train_non_matching]).sample(frac=1, random_state=42)
+
+        return train_balanced
+
+    except Exception as e:
+        print(f"Error during balancing: {e}")
+        return None
+    
+
+
+    
+
+
 
 
 # Transform the data
