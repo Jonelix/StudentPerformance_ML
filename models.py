@@ -51,7 +51,7 @@ class LinearRegressionModel(nn.Module):
     def forward(self, x):
         return self.linear(x)
 
-def train_linear_model(X_train, y_train, reg_type=None, alpha=0.01):
+def train_linear_model(X_train, y_train, reg_type=None, alpha=0.01, class_weight=None):
     """
     Train a linear regression model using SGD with optional regularization.
     Automatically saves the trained model as JSON.
@@ -88,19 +88,19 @@ class LogisticRegressionModel(nn.Module):
     def forward(self, x):
         return torch.sigmoid(self.linear(x))
 
-def train_logistic_model(X_train, y_train, reg_type=None, alpha=0.01):
+def train_logistic_model(X_train, y_train, reg_type=None, alpha=0.01, class_weight=None):
     """
     Train a logistic regression model using SGD with optional regularization.
     Automatically saves the trained model as JSON.
     """
     if reg_type is None:
-        model = SGDClassifier(loss="log_loss", penalty=None, learning_rate="optimal")
+        model = SGDClassifier(loss="log_loss", penalty=None, learning_rate="optimal", class_weight=class_weight)
         MODEL_SAVE_PATH = "trained_models/LoRe_NoReg"
     elif reg_type == "l1":
-        model = SGDClassifier(loss="log_loss", penalty="l1", alpha=alpha, learning_rate="optimal")
+        model = SGDClassifier(loss="log_loss", penalty="l1", alpha=alpha, learning_rate="optimal", class_weight=class_weight)
         MODEL_SAVE_PATH = "trained_models/LoRe_L1"
     elif reg_type == "l2":
-        model = SGDClassifier(loss="log_loss", penalty="l2", alpha=alpha, learning_rate="optimal")
+        model = SGDClassifier(loss="log_loss", penalty="l2", alpha=alpha, learning_rate="optimal", class_weight=class_weight)
         MODEL_SAVE_PATH = "trained_models/LoRe_L2"
     else:
         raise ValueError("Invalid regularization type. Choose 'l1' or 'l2'.")
