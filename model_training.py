@@ -46,9 +46,10 @@ from sklearn.preprocessing import StandardScaler
 # ---------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------
-RANDOM_STATE = 42
+RANDOM_STATE = 11032004
 np.random.seed(RANDOM_STATE)
 torch.manual_seed(RANDOM_STATE)
+CV_SPLITS = 5
 
 # ---------------------------------------------------------------------
 # General paths
@@ -88,11 +89,12 @@ def train_linear_model(
     y: np.ndarray,
     penalty: Literal["none", "l2", "l1", "elasticnet"] = "l2",
     alpha_grid: Sequence[float] = (1e-4, 1e-3, 1e-2),
-    cv_splits: int = 5,
+    cv_splits: int = CV_SPLITS,
     scoring: str = "neg_root_mean_squared_error",
+    threshold_tuning: bool = False,  # Add a flag for threshold tuning
     save: bool = True,
-) -> Pipeline:
-    """Fit a (scaler → SGDRegressor) pipeline with CV‑tuned alpha.
+) -> Tuple[Pipeline, Optional[float]]:
+    """Fit a (scaler → SGDRegressor) pipeline with CV‑tuned alpha and optional threshold tuning.
 
     Parameters
     ----------
@@ -100,9 +102,27 @@ def train_linear_model(
     penalty : regularisation type (matches SGDRegressor)
     alpha_grid : list of α (regularisation strengths) to search
     cv_splits : number of stratified folds
+    threshold_tuning : if True, perform threshold tuning for binary decisions
     save : if True, persist the best pipeline under `models/linear/`.
+
+    Returns
+    -------
+    pipeline : fitted Pipeline
+    best_thresh : decision threshold that maximises F1 on the val‑set (if threshold_tuning=True)
     """
 
+    # ── 1. hold‑out split for threshold tuning ──
+    if threshold_tuning:
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X,
+            y,
+            test_size=0.2,
+            random_state=RANDOM_STATE,
+        )
+    else:
+        X_tr, y_tr = X, y
+
+    # ── 2. build scaling + estimator pipeline ──
     pipe = make_pipeline(
         StandardScaler(with_mean=False),  # keeps sparse dummies sparse
         SGDRegressor(
@@ -112,10 +132,11 @@ def train_linear_model(
         ),
     )
 
+    # ── 3. hyperparameter tuning ──
     param_grid = {"sgdregressor__alpha": alpha_grid}
     cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=RANDOM_STATE)
     search = GridSearchCV(pipe, param_grid, scoring=scoring, cv=cv, n_jobs=-1)
-    search.fit(X, y)
+    search.fit(X_tr, y_tr)
 
     best_pipe: Pipeline = search.best_estimator_
     print(
@@ -123,13 +144,26 @@ def train_linear_model(
         f"{best_pipe.named_steps['sgdregressor'].alpha}"
     )
 
+    # ── 4. threshold tuning on validation set ──
+    best_thresh = None
+    if threshold_tuning:
+        y_pred = best_pipe.predict(X_val)
+        prec, rec, thresh = precision_recall_curve(y_val, y_pred)
+        f1 = 2 * prec * rec / (prec + rec + 1e-9)
+        best_idx = f1.argmax()
+        best_thresh = thresh[best_idx]
+        print(
+            f"[LR] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
+        )
+
+    # ── 5. save pipeline ──
     if save:
         out_dir = _model_dir("linear")
         path = out_dir / "pipeline.joblib"
         joblib.dump(best_pipe, path)
         print(f"[LR] Saved pipeline to {path.relative_to(ROOT_DIR)}")
 
-    return best_pipe
+    return best_pipe, best_thresh
 
 
 # ------------------------------------------------------------------
@@ -143,7 +177,7 @@ def train_logistic_model(
     alpha_grid: Sequence[float] = (1e-4, 1e-3, 1e-2),
     l1_ratio_grid: Sequence[float] | None = None,  # used if elasticnet
     use_smote: bool = True,
-    cv_splits: int = 5,
+    cv_splits: int = CV_SPLITS,
     save: bool = True,
 ) -> Tuple[Pipeline, float]:
     """Train a logistic‑regression pipeline with SMOTE + CV‑tuned hyper‑params.
@@ -241,7 +275,7 @@ def train_logistic_model(
 # =====================================================================
 
 class TorchLogReg(nn.Module):
-    """Simple logistic regression (linear layer)返回 raw logits."""
+    """Simple logistic regression (linear layer) raw logits."""
 
     def __init__(self, d_in: int):
         super().__init__()

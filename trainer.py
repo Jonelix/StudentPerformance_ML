@@ -13,14 +13,30 @@ from model_training import (
 # ------------------------------------------------------------------
 # 1.  Load & split your data  (X : 2‑D ndarray,  y : 1‑D ndarray)
 # ------------------------------------------------------------------
-df = pd.read_csv("data/pisa_2022/pisa_clean.csv")
-df["PASS"] = (df["GENERAL_SCORE"] >= 452).astype(int)
-#df["PASS"] = (df["G1"] >= 10).astype(int)
+
+PISA_MODEL = False
+
+if PISA_MODEL:
+    PASS = "GENERAL_SCORE"
+    DATA_PATH = "data/pisa_2022/pisa_clean.csv"
+    PERCENTILE = 36
+    GRADE_THRESH = 400
+else:
+    PASS = "G1"
+    DATA_PATH = "data/student_portugal/portugal_clean.csv"
+    GRADE_THRESH = 10
+
+df = pd.read_csv(DATA_PATH)
+
+if PISA_MODEL:
+    GRADE_THRESH = df['GENERAL_SCORE'].quantile(PERCENTILE / 100)
+
+df["PASS"] = (df[PASS] >= GRADE_THRESH).astype(int)
 target = "PASS"  # target column name
 
 # 2. define a list of columns that leak target information
-LEAK_COLS = ["GENERAL_SCORE"]
-#LEAK_COLS = ["G1"]
+LEAK_COLS = [PASS]
+
 
 
 # 3. build the feature matrix
