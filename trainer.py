@@ -14,6 +14,11 @@ from model_training import (
 # ------------------------------------------------------------------
 
 PISA_MODEL = False
+REGULARIZER = "l2"  # Can be "none", "l1", "l2"
+ALPHA_GRID = (1e-4, 1e-3, 1e-2)  # for SGDClassifier / SGDRegressor regularization strength
+LOG_REG_USE_SMOTE = True  # for logistic regression only
+LIN_THRESHOLD_TUNING = True  # for both models
+CV_SPLITS = 5  # for both models
 
 if PISA_MODEL:
     PASS = "GENERAL_SCORE"
@@ -55,9 +60,10 @@ X_train, X_test, y_train, y_test = train_test_split(
 pipe, best_thresh = train_logistic_model(
     X_train,
     y_train,
-    penalty="l2",                # or "elasticnet"
-    alpha_grid=(1e-4, 1e-3, 1e-2),
-    use_smote=True,              # default
+    penalty=REGULARIZER,                
+    alpha_grid=ALPHA_GRID,
+    use_smote=LOG_REG_USE_SMOTE,              # default
+    cv_splits=CV_SPLITS,               # default
 )
 
 # pipe & threshold are auto‑saved under  models/logistic/<timestamp>/
@@ -65,7 +71,12 @@ pipe, best_thresh = train_logistic_model(
 # 2B.  OR…  Train a linear regressor (RMSE tuned)
 # ------------------------------------------------------------------
 lin_pipe, lin_best_thresh = train_linear_model(
-    X_train, y_train, penalty="l2", alpha_grid=(1e-4, 1e-3, 1e-2)
+    X_train, 
+    y_train, 
+    penalty=REGULARIZER, 
+    alpha_grid=ALPHA_GRID,
+    threshold_tuning=LIN_THRESHOLD_TUNING,  # default
+    cv_splits=CV_SPLITS,               # default
 )
 
 # ------------------------------------------------------------------
@@ -83,69 +94,35 @@ print(classification_report(y_test, y_pred, digits=3))
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 def plot_cm(y_true, y_pred, title, ax=None):
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     disp = ConfusionMatrixDisplay(cm, display_labels=["Fail (0)", "Pass (1)"])
     disp.plot(cmap="Blues", values_format="d", ax=ax)
-    plt.title(title)
+    if ax is not None:
+        ax.set_title(title)  # Explicitly set the title on the provided axes
     return cm
 
 # Keep track so we can show all three figures side‑by‑side
 fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
-# ──────────────────────────────────────────────────────────────────
-# A. the logistic‑pipeline you already evaluated (for completeness)
-# ──────────────────────────────────────────────────────────────────
+# Logistic regression confusion matrix
 cm_log = plot_cm(y_test, y_pred, "Logistic pipeline", ax=axes[0])
 print("\n[Logistic] report\n", classification_report(y_test, y_pred, digits=3))
 
-# ──────────────────────────────────────────────────────────────────
-# B. Linear‑regression pipeline   (probability ≈ clip(ŷ) )
-# ──────────────────────────────────────────────────────────────────
+# Linear regression confusion matrix
 prob_lin = lin_pipe.predict(X_test)           # raw continuous output
 prob_lin = np.clip(prob_lin, 0, 1)            # ensure 0‑1 range
 if lin_best_thresh is not None:
-    y_pred_lin = (prob_lin > lin_best_thresh).astype(int)     # basic 0.5 threshold
+    y_pred_lin = (prob_lin > lin_best_thresh).astype(int)
 else:
-    y_pred_lin = (prob_lin > 0.5).astype(int)                # basic 0.5 threshold
+    y_pred_lin = (prob_lin > 0.5).astype(int)
 
 cm_lin = plot_cm(y_test, y_pred_lin, "Linear pipeline", ax=axes[1])
 print("\n[Linear] report\n", classification_report(y_test, y_pred_lin, digits=3))
 
 plt.tight_layout()
 plt.show()
-
-
-import joblib
-import numpy as np
-from pathlib import Path
-
-# 1️⃣  reload the bundle you just saved
-log_dir = max(Path("models/logistic").iterdir(), key=lambda d: d.stat().st_mtime)
-bundle  = joblib.load(log_dir / "model.joblib")
-pipe    = bundle["pipeline"]                 # fitted pipeline
-
-# 2️⃣  grab raw coefficients  (shape: [1, n_features])
-coef = pipe.named_steps["clf"].coef_.ravel()
-
-# 3️⃣  pick the 10 with largest |coef|
-top_idx = np.argsort(np.abs(coef))[::-1][:10]
-top_features = [(feature_names[i], coef[i]) for i in top_idx]
-
-print("Top 10 log‑reg features (coef, sign matters):")
-for name, weight in top_features:
-    print(f"{name:35s}  {weight:+.4f}   (odds ×{np.exp(weight):.2f})")
-
-lin_dir = max(Path("models/linear").iterdir(), key=lambda d: d.stat().st_mtime)
-lin_pipe = joblib.load(lin_dir / "pipeline.joblib")
-
-coef = lin_pipe.named_steps["sgdregressor"].coef_.ravel()
-top_idx = np.argsort(np.abs(coef))[::-1][:10]
-print("\nTop 10 linear‑reg predictors (per–SD impact on score):")
-for i in top_idx:
-    print(f"{feature_names[i]:35s}  {coef[i]:+.3f} points")
 
 
 # ------------------------------------------------------------------
