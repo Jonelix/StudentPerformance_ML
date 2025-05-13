@@ -6,7 +6,6 @@ from sklearn.model_selection import train_test_split
 from model_training import (
     train_linear_model,
     train_logistic_model,
-    train_torch_logreg,
     load_pipeline,               # convenience wrapper
 )
 
@@ -65,21 +64,9 @@ pipe, best_thresh = train_logistic_model(
 # ------------------------------------------------------------------
 # 2B.  OR…  Train a linear regressor (RMSE tuned)
 # ------------------------------------------------------------------
-lin_pipe = train_linear_model(
+lin_pipe, lin_best_thresh = train_linear_model(
     X_train, y_train, penalty="l2", alpha_grid=(1e-4, 1e-3, 1e-2)
 )
-
-# ------------------------------------------------------------------
-# 2C.  OR…  Train a PyTorch logistic model (mini‑batches + early stop)
-# ------------------------------------------------------------------
-torch_model = train_torch_logreg(
-    X_train,
-    y_train,
-    batch_size=256,
-    epochs=100,
-    lr=1e-2,
-)
-# best checkpoint stored in  models/torch_logreg/<timestamp>/best_state.pt
 
 # ------------------------------------------------------------------
 # 3.  Inference with the sklearn pipeline
@@ -106,12 +93,12 @@ def plot_cm(y_true, y_pred, title, ax=None):
     return cm
 
 # Keep track so we can show all three figures side‑by‑side
-fig, axes = plt.subplots(1, 3, figsize=(16, 4))
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 # ──────────────────────────────────────────────────────────────────
 # A. the logistic‑pipeline you already evaluated (for completeness)
 # ──────────────────────────────────────────────────────────────────
-cm_log = plot_cm(y_test, y_pred, "Logistic‑pipeline", ax=axes[0])
+cm_log = plot_cm(y_test, y_pred, "Logistic pipeline", ax=axes[0])
 print("\n[Logistic] report\n", classification_report(y_test, y_pred, digits=3))
 
 # ──────────────────────────────────────────────────────────────────
@@ -119,22 +106,13 @@ print("\n[Logistic] report\n", classification_report(y_test, y_pred, digits=3))
 # ──────────────────────────────────────────────────────────────────
 prob_lin = lin_pipe.predict(X_test)           # raw continuous output
 prob_lin = np.clip(prob_lin, 0, 1)            # ensure 0‑1 range
-y_pred_lin = (prob_lin > 0.5).astype(int)     # basic 0.5 threshold
+if lin_best_thresh is not None:
+    y_pred_lin = (prob_lin > lin_best_thresh).astype(int)     # basic 0.5 threshold
+else:
+    y_pred_lin = (prob_lin > 0.5).astype(int)                # basic 0.5 threshold
 
-cm_lin = plot_cm(y_test, y_pred_lin, "Linear‑pipeline", ax=axes[1])
+cm_lin = plot_cm(y_test, y_pred_lin, "Linear pipeline", ax=axes[1])
 print("\n[Linear] report\n", classification_report(y_test, y_pred_lin, digits=3))
-
-# ──────────────────────────────────────────────────────────────────
-# C. PyTorch logistic model
-# ──────────────────────────────────────────────────────────────────
-torch_model.eval()
-with torch.no_grad():
-    logits = torch_model(torch.tensor(X_test, dtype=torch.float32)).squeeze().numpy()
-prob_torch = 1 / (1 + np.exp(-logits))        # sigmoid
-y_pred_torch = (prob_torch > best_thresh).astype(int)
-
-cm_torch = plot_cm(y_test, y_pred_torch, "PyTorch logistic", ax=axes[2])
-print("\n[Torch] report\n", classification_report(y_test, y_pred_torch, digits=3))
 
 plt.tight_layout()
 plt.show()
@@ -168,28 +146,6 @@ top_idx = np.argsort(np.abs(coef))[::-1][:10]
 print("\nTop 10 linear‑reg predictors (per–SD impact on score):")
 for i in top_idx:
     print(f"{feature_names[i]:35s}  {coef[i]:+.3f} points")
-
-import torch
-
-# reload best checkpoint; you already have 'torch_model' in RAM,
-# but here's how to load from disk:
-torch_dir = max(Path("models/torch_logreg").iterdir(), key=lambda d: d.stat().st_mtime)
-state_dict = torch.load(torch_dir / "best_state.pt", map_location="cpu")
-
-from model_training import TorchLogReg   # same class definition
-torch_model = TorchLogReg(len(feature_names))
-torch_model.load_state_dict(state_dict)
-torch_model.eval()
-
-weights = torch_model.linear.weight.detach().numpy().ravel()
-top_idx  = np.argsort(np.abs(weights))[::-1][:10]
-
-print("\nTop 10 PyTorch log‑reg features:")
-for i in top_idx:
-    w = weights[i]
-    print(f"{feature_names[i]:35s}  {w:+.4f}   (odds ×{np.exp(w):.2f})")
-
-
 
 
 # ------------------------------------------------------------------
