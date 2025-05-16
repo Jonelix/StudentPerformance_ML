@@ -31,10 +31,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTETomek, SMOTEENN
+from imblearn.under_sampling import EditedNearestNeighbours
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import SGDClassifier, SGDRegressor
 from sklearn.metrics import (
+    make_scorer, f1_score,
     average_precision_score,
     balanced_accuracy_score,
     precision_recall_curve,
@@ -133,10 +136,10 @@ def train_linear_model(
     search.fit(X_tr, y_tr)
 
     best_pipe: Pipeline = search.best_estimator_
-    print(
-        f"[LR] Best {scoring} = {search.best_score_:.4f} with alpha="
-        f"{best_pipe.named_steps['sgdregressor'].alpha}"
-    )
+    #print(
+    #    f"[LR] Best {scoring} = {search.best_score_:.4f} with alpha="
+    #    f"{best_pipe.named_steps['sgdregressor'].alpha}"
+    #)
 
     # ── 4. threshold tuning on validation set ──
     best_thresh = None
@@ -146,9 +149,9 @@ def train_linear_model(
         f1 = 2 * prec * rec / (prec + rec + 1e-9)
         best_idx = f1.argmax()
         best_thresh = thresh[best_idx]
-        print(
-            f"[LR] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
-        )
+        #print(
+        #    f"[LR] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
+        #)
 
     # ── 5. save pipeline ──
     if save:
@@ -171,6 +174,8 @@ def train_logistic_model(
     alpha_grid: Sequence[float] = (1e-4, 1e-3, 1e-2),
     l1_ratio_grid: Sequence[float] | None = None,  # used if elasticnet
     use_smote: bool = True,
+    use_smote_tomek: bool = False,
+    use_smote_enn: bool = False,
     cv_splits: int = CV_SPLITS,
     save: bool = True,
 ) -> Tuple[Pipeline, float]:
@@ -195,6 +200,12 @@ def train_logistic_model(
     pipe_steps: list[Tuple[str, Any]] = []
     if use_smote:
         pipe_steps.append(("smote", SMOTE(random_state=RANDOM_STATE)))
+    elif use_smote_tomek:
+        pipe_steps.append(("smote_tomek", SMOTETomek(random_state=RANDOM_STATE)))
+    elif use_smote_enn:
+        enn = EditedNearestNeighbours(kind_sel="mode", n_neighbors=3)
+        pipe_steps.append(("smote_enn", SMOTEENN(random_state=RANDOM_STATE, enn=enn)))
+        
 
     pipe_steps.extend(
         [
@@ -203,7 +214,7 @@ def train_logistic_model(
                 "clf",
                 SGDClassifier(
                     loss="log_loss",
-                    penalty=penalty,
+                    penalty=None if penalty == "none" else penalty,
                     class_weight="balanced",
                     random_state=RANDOM_STATE,
                 ),
@@ -219,21 +230,22 @@ def train_logistic_model(
     if penalty == "elasticnet":
         param_grid["clf__l1_ratio"] = l1_ratio_grid or [0.1, 0.5, 0.9]
 
+    f1_pos = make_scorer(f1_score, average="binary", pos_label=1)
     cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=RANDOM_STATE)
     search = GridSearchCV(
         pipe,
         param_grid,
-        scoring="average_precision",
+        scoring=f1_pos,
         cv=cv,
         n_jobs=-1,
     )
     search.fit(X_tr, y_tr)
 
     best_pipe: Pipeline = search.best_estimator_
-    print(
-        f"[CLF] Best AUPRC = {search.best_score_:.4f} with"
-        f" alpha={best_pipe.named_steps['clf'].alpha}"
-    )
+    #print(
+    #    f"[CLF] Best AUPRC = {search.best_score_:.4f} with"
+    #    f" alpha={best_pipe.named_steps['clf'].alpha}"
+    #)
 
     # ── 3. threshold tuning on validation set ──
     y_prob = best_pipe.predict_proba(X_val)[:, 1]
@@ -241,9 +253,9 @@ def train_logistic_model(
     f1 = 2 * prec * rec / (prec + rec + 1e-9)
     best_idx = f1.argmax()
     best_thresh: float = thresh[best_idx]
-    print(
-        f"[CLF] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
-    )
+    #print(
+    #    f"[CLF] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
+    #)
 
     # ── 4. save everything ──
     if save:
