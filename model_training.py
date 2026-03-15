@@ -19,8 +19,9 @@ Author: <your‑name> – 2025‑05‑09
 """
 from __future__ import annotations
 
-import json
 import os
+
+import json
 import time
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional, Sequence, Tuple
@@ -36,6 +37,7 @@ from imblearn.under_sampling import EditedNearestNeighbours
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import SGDClassifier, SGDRegressor
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     make_scorer, f1_score,
     average_precision_score,
@@ -87,7 +89,7 @@ def train_linear_model(
     penalty: Literal["none", "l2", "l1", "elasticnet"] = "l2",
     alpha_grid: Sequence[float] = (1e-4, 1e-3, 1e-2),
     cv_splits: int = CV_SPLITS,
-    scoring: str = "neg_root_mean_squared_error",
+    scoring: str = "neg_mean_squared_error",
     threshold_tuning: bool = True,  # Add a flag for threshold tuning
     save: bool = True,
 ) -> Tuple[Pipeline, Optional[float]]:
@@ -120,17 +122,22 @@ def train_linear_model(
         X_tr, y_tr = X, y
 
     # ── 2. build scaling + estimator pipeline ──
-    pipe = make_pipeline(
-        StandardScaler(with_mean=False),  # keeps sparse dummies sparse
-        SGDRegressor(
-            loss="squared_error",
-            penalty=None if penalty == "none" else penalty,
-            random_state=RANDOM_STATE,
-        ),
+    pipe = Pipeline(
+        steps=[
+            ("scale", StandardScaler(with_mean=False)),
+            (
+                "clf",
+                SGDRegressor(
+                    loss="squared_error",
+                    penalty=None if penalty == "none" else penalty,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
     )
 
     # ── 3. hyperparameter tuning ──
-    param_grid = {"sgdregressor__alpha": alpha_grid}
+    param_grid = {"clf__alpha": alpha_grid}
     cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=RANDOM_STATE)
     search = GridSearchCV(pipe, param_grid, scoring=scoring, cv=cv, n_jobs=-1)
     search.fit(X_tr, y_tr)
@@ -146,8 +153,8 @@ def train_linear_model(
     if threshold_tuning:
         y_pred = best_pipe.predict(X_val)
         prec, rec, thresh = precision_recall_curve(y_val, y_pred)
-        f1 = 2 * prec * rec / (prec + rec + 1e-9)
-        best_idx = f1.argmax()
+        f1 = 2*prec*rec/(prec+rec+1e-9)
+        best_idx = f1[:-1].argmax()          # skip the extra element
         best_thresh = thresh[best_idx]
         #print(
         #    f"[LR] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
@@ -193,7 +200,7 @@ def train_logistic_model(
         y,
         test_size=0.2,
         stratify=y,
-        random_state=RANDOM_STATE,
+        random_state=RANDOM_STATE
     )
 
     # ── 2. build resampling + scaling + estimator pipeline ──
@@ -216,6 +223,9 @@ def train_logistic_model(
                     loss="log_loss",
                     penalty=None if penalty == "none" else penalty,
                     class_weight="balanced",
+                    early_stopping=True,
+                    n_iter_no_change=5,
+                    validation_fraction=0.1,
                     random_state=RANDOM_STATE,
                 ),
             ),
@@ -230,29 +240,25 @@ def train_logistic_model(
     if penalty == "elasticnet":
         param_grid["clf__l1_ratio"] = l1_ratio_grid or [0.1, 0.5, 0.9]
 
-    f1_pos = make_scorer(f1_score, average="binary", pos_label=1)
+    
     cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=RANDOM_STATE)
     search = GridSearchCV(
         pipe,
         param_grid,
-        scoring=f1_pos,
+        scoring="average_precision",
         cv=cv,
         n_jobs=-1,
     )
     search.fit(X_tr, y_tr)
 
     best_pipe: Pipeline = search.best_estimator_
-    #print(
-    #    f"[CLF] Best AUPRC = {search.best_score_:.4f} with"
-    #    f" alpha={best_pipe.named_steps['clf'].alpha}"
-    #)
 
     # ── 3. threshold tuning on validation set ──
     y_prob = best_pipe.predict_proba(X_val)[:, 1]
     prec, rec, thresh = precision_recall_curve(y_val, y_prob)
-    f1 = 2 * prec * rec / (prec + rec + 1e-9)
-    best_idx = f1.argmax()
-    best_thresh: float = thresh[best_idx]
+    f1 = 2*prec*rec/(prec+rec+1e-9)
+    best_idx = f1[:-1].argmax()          # skip the extra element
+    best_thresh = thresh[best_idx]
     #print(
     #    f"[CLF] Best F1 = {f1[best_idx]:.4f} at threshold = {best_thresh:.3f}"
     #)
